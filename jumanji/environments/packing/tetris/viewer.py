@@ -282,7 +282,6 @@ class TetrisViewer(MatplotlibViewer[State]):
             make_frame,
             frames=frames,
             interval=interval,
-            save_count=len(frames),
         )
 
         if save_path:
