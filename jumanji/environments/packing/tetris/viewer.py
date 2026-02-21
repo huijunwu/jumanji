@@ -219,22 +219,37 @@ class TetrisViewer(MatplotlibViewer[State]):
         - Drop shows only top ≤2 and bottom ≤2 frames (edge-only).
         - Rotation-preview panel above main grid shows all 4 rotations of the
           just-placed piece with the chosen rotation highlighted.
+        - Column indices shown above main grid; selected column bold+black.
         """
         fig_name = self._name + "_animation"
         fig = plt.figure(fig_name, figsize=self.figure_size)
         plt.close(fig=fig)
 
+        # Rotation panel layout: each mini-cell is half a main-grid cell.
+        # 4 rotations × 4 cells + 3 gaps = 19 mini-cells ≈ num_cols width.
+        cs = self.num_cols / 20.0
+        panel_y_span = 5 * cs + 0.5
+        main_y_span = self.num_rows + 1.0
+
+        # Font size (points) that fits one digit per main-grid cell.
+        fig_w, fig_h = self.figure_size
+        subplot_h = fig_h * main_y_span / (main_y_span + panel_y_span)
+        cell_pts = min(fig_w / (self.num_cols + 1.0), subplot_h / main_y_span) * 72 * 0.48
+
+        # height_ratios proportional to ylim ranges so 1 data-unit = same physical
+        # size in both axes (required for rotation cells to be exactly half of grid cells).
         gs = gridspec.GridSpec(
             2,
             1,
             figure=fig,
-            height_ratios=[1, self.num_rows],
+            height_ratios=[panel_y_span, main_y_span],
             hspace=0.15,
         )
         ax_panel = fig.add_subplot(gs[0])
         ax_main = fig.add_subplot(gs[1])
 
-        frames: List[Tuple[chex.Array, float, chex.Array, int, int]] = []
+        # Per-frame data: (grid, score, all_rotations, rot_idx, type_idx, x_pos, grid_color_val)
+        frames: List[Tuple[chex.Array, float, chex.Array, int, int, int, int]] = []
 
         for state in states:
             if state.is_reset:
@@ -242,15 +257,19 @@ class TetrisViewer(MatplotlibViewer[State]):
             score = float(state.score - state.reward)
             type_idx, rot_idx = self._infer_placed_piece(state)
             all_rotations = self._all_tetrominoes[type_idx]  # (4, 4, 4)
+            x_pos = int(state.x_position)
+            grid_color_val = int(state.old_tetromino_rotated.max())
 
             drop_grids = self._drop_tetromino_simple(state, state.grid_padded_old)
             for g in drop_grids:
-                frames.append((g, score, all_rotations, rot_idx, type_idx))
+                frames.append((g, score, all_rotations, rot_idx, type_idx, x_pos, grid_color_val))
 
             if state.full_lines[: self.num_rows].sum() > 0:
                 crush_grids = self._crush_lines(state, drop_grids[-1])
                 for g in crush_grids:
-                    frames.append((g, score, all_rotations, rot_idx, type_idx))
+                    frames.append(
+                        (g, score, all_rotations, rot_idx, type_idx, x_pos, grid_color_val)
+                    )
 
         if not frames:
             frames.append(
@@ -260,19 +279,36 @@ class TetrisViewer(MatplotlibViewer[State]):
                     self._all_tetrominoes[0],
                     0,
                     0,
+                    -1,
+                    0,
                 )
             )
 
         def make_frame(
-            frame_data: Tuple[chex.Array, float, chex.Array, int, int],
+            frame_data: Tuple[chex.Array, float, chex.Array, int, int, int, int],
         ) -> Tuple[Artist, ...]:
-            grid, score, all_rots, sel_rot, t_idx = frame_data
+            grid, score, all_rots, sel_rot, t_idx, x_pos, gcv = frame_data
             ax_main.clear()
             ax_main.invert_yaxis()
             self._add_grid_image(ax_main, grid, is_animate=True)
+            ax_main.set_xlim(-0.5, self.num_cols + 0.5)
+            ax_main.set_ylim(self.num_rows + 0.5, -0.5)
+
+            for col_idx in range(self.num_cols):
+                is_active = col_idx == x_pos
+                ax_main.text(
+                    col_idx + 0.5,
+                    -0.3,
+                    str(col_idx),
+                    ha="center",
+                    va="bottom",
+                    fontsize=cell_pts,
+                    fontweight="bold" if is_active else "normal",
+                    color="black" if is_active else "grey",
+                )
 
             ax_panel.clear()
-            self._draw_rotation_panel(ax_panel, all_rots, sel_rot, t_idx)
+            self._draw_rotation_panel(ax_panel, all_rots, sel_rot, gcv, cell_pts)
 
             fig.suptitle(f"Tetris    Score: {int(score)}", size=20)
             return (ax_main, ax_panel)
@@ -307,18 +343,38 @@ class TetrisViewer(MatplotlibViewer[State]):
         ax: plt.Axes,
         all_rotations: chex.Array,  # (4, 4, 4)
         selected_rot_idx: int,
-        type_idx: int,
+        grid_color_val: int,
+        label_fontsize: float = 9,
     ) -> None:
-        ax.set_axis_off()
-        gap = 1
-        mini_w = 4
-        total_w = 4 * mini_w + 3 * gap  # 19
+        """Draw 4 rotation previews above the main grid.
 
-        color_id = (type_idx % (len(self.colors) - 1)) + 1
+        Shows all 4 rotations of the placed tetromino side-by-side.
+        Selected rotation is coloured and highlighted with a dashed border;
+        others are greyed out.  Cell size is half a main-grid cell so the
+        panel width approximately matches the grid width.
+
+        Args:
+            ax: Axes to draw on.
+            all_rotations: (4, 4, 4) binary rotation matrices for one tetromino type.
+            selected_rot_idx: Index (0-3) of the chosen rotation.
+            grid_color_val: Colour value from the grid (state.old_tetromino_rotated.max()),
+                mapped through the same formula as _get_cell_attributes to match grid colours.
+            label_fontsize: Font size in points for the degree labels.
+        """
+        ax.set_axis_off()
+        cs = self.num_cols / 20.0  # half a main-grid cell
+        gap = cs
+        mini_w = 4 * cs
+        content_w = 4 * mini_w + 3 * gap
+        left_margin = (self.num_cols - content_w) / 2
+
+        color_id = (
+            grid_color_val if grid_color_val == 0 else grid_color_val % (len(self.colors) - 1) + 1
+        )
 
         for r in range(4):
             tet = all_rotations[r]  # (4, 4)
-            x_offset = r * (mini_w + gap)
+            x_offset = left_margin + r * (mini_w + gap)
             is_selected = r == selected_rot_idx
 
             for row in range(4):
@@ -337,9 +393,9 @@ class TetrisViewer(MatplotlibViewer[State]):
                         ec = (0.5, 0.5, 0.5, 0.6)
                         lw = 0.5
                     rect = plt.Rectangle(
-                        (x_offset + col, row),
-                        1,
-                        1,
+                        (x_offset + col * cs, row * cs),
+                        cs,
+                        cs,
                         facecolor=fc,
                         edgecolor=ec,
                         linewidth=lw,
@@ -347,19 +403,19 @@ class TetrisViewer(MatplotlibViewer[State]):
                     ax.add_patch(rect)
 
             label = f"{r * 90}°"
-            label_kwargs: Dict[str, Any] = {"ha": "center", "va": "top", "fontsize": 7}
+            label_kwargs: Dict[str, Any] = {"ha": "center", "va": "top", "fontsize": label_fontsize}
             if is_selected:
                 label_kwargs["fontweight"] = "bold"
                 label_kwargs["color"] = "black"
             else:
                 label_kwargs["color"] = "grey"
-            ax.text(x_offset + mini_w / 2, 4.3, label, **label_kwargs)
+            ax.text(x_offset + mini_w / 2, 4 * cs + 0.8 * cs, label, **label_kwargs)
 
-        sel_x = selected_rot_idx * (mini_w + gap)
+        sel_x = left_margin + selected_rot_idx * (mini_w + gap)
         highlight = plt.Rectangle(
             (sel_x - 0.1, -0.1),
             mini_w + 0.2,
-            4.2,
+            4 * cs + 0.2,
             fill=False,
             edgecolor="black",
             linewidth=2.0,
@@ -367,8 +423,8 @@ class TetrisViewer(MatplotlibViewer[State]):
         )
         ax.add_patch(highlight)
 
-        ax.set_xlim(-0.5, total_w + 0.5)
-        ax.set_ylim(5.0, -0.5)
+        ax.set_xlim(-0.5, self.num_cols + 0.5)
+        ax.set_ylim(4 * cs + cs, -0.5)
         ax.set_aspect(1)
 
     def _add_grid_image(self, ax: plt.Axes, grid: chex.Array, is_animate: bool = False) -> None:
