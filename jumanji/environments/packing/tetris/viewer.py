@@ -269,7 +269,7 @@ class TetrisViewer(MatplotlibViewer[State]):
             grid, score, all_rots, sel_rot, t_idx = frame_data
             ax_main.clear()
             ax_main.invert_yaxis()
-            self._add_grid_image(ax_main, grid)
+            self._add_grid_image(ax_main, grid, is_animate=True)
 
             ax_panel.clear()
             self._draw_rotation_panel(ax_panel, all_rots, sel_rot, t_idx)
@@ -371,22 +371,31 @@ class TetrisViewer(MatplotlibViewer[State]):
         ax.set_ylim(5.0, -0.5)
         ax.set_aspect(1)
 
-    def _add_grid_image(self, ax: plt.Axes, grid: chex.Array) -> None:
-        self._draw_grid(grid, ax)
+    def _add_grid_image(self, ax: plt.Axes, grid: chex.Array, is_animate: bool = False) -> None:
+        self._draw_grid(grid, ax, is_animate=is_animate)
         ax.set_axis_off()
         ax.set_aspect(1)
         ax.relim()
         ax.autoscale_view()
 
-    def _draw_grid(self, grid: chex.Array, ax: plt.Axes) -> None:
+    def _draw_grid(self, grid: chex.Array, ax: plt.Axes, is_animate: bool = False) -> None:
         rows, cols = grid.shape
 
         for row in range(rows):
             for col in range(cols):
-                self._draw_grid_cell(grid[row, col], row, col, ax)
+                self._draw_grid_cell(grid[row, col], row, col, ax, is_animate=is_animate)
 
-    def _draw_grid_cell(self, cell_value: int, row: int, col: int, ax: plt.Axes) -> None:
-        is_padd = row < 4
+    def _draw_grid_cell(
+        self,
+        cell_value: int,
+        row: int,
+        col: int,
+        ax: plt.Axes,
+        is_animate: bool = False,
+    ) -> None:
+        # render() mode: rows 0-3 are the virtual preview zone → dashed borders.
+        # animate() mode: grid is cropped to real (num_rows, num_cols) → all solid.
+        is_padd = False if is_animate else row < 4
         cell = plt.Rectangle((col, row), 1, 1, **self._get_cell_attributes(cell_value, is_padd))
         ax.add_patch(cell)
 
