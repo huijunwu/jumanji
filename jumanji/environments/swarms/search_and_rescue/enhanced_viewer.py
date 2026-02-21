@@ -142,14 +142,16 @@ class EnhancedSearchAndRescueViewer:
         searcher_vision_range: float = 0.4,
         target_vision_range: float = 0.1,
         target_contact_range: float = 0.02,
+        target_visual_radius: float = 0.02,
         max_rotate: float = 0.25,
         trail_length: int = 20,
     ) -> None:
         self.env_size = env_size
-        self.view_angle = view_angle  # fraction of π (half-angle)
+        self.view_angle = view_angle
         self.searcher_vision_range = searcher_vision_range
         self.target_vision_range = target_vision_range
         self.target_contact_range = target_contact_range
+        self.target_visual_radius = target_visual_radius
         self.max_rotate = max_rotate  # fraction of π
         self.trail_length = trail_length
 
@@ -198,10 +200,10 @@ class EnhancedSearchAndRescueViewer:
         fig = plt.figure(figsize=(fig_w, fig_h), facecolor=_BG_COLOR)
 
         margin_l = 0.03
-        margin_r = 0.02
+        margin_r = 0.05
         margin_top = 0.03
         margin_bot = 0.04
-        gap_lr = 0.04  # gap between map and right panels
+        gap_lr = 0.04
 
         map_frac_w = map_size_in / fig_w
         map_frac_h = map_size_in / fig_h
@@ -222,9 +224,10 @@ class EnhancedSearchAndRescueViewer:
 
         # Right column: each agent gets one row split into [obs | action]
         right_start_x = map_left + map_frac_w + gap_lr
-        obs_frac_w = (panel_col_w / fig_w) - 0.01
-        act_frac_w = (action_col_w / fig_w) - 0.01
+        right_total_w = 1.0 - margin_r - right_start_x
+        obs_frac_w = right_total_w / 2 - 0.01
         act_start_x = right_start_x + obs_frac_w + 0.02
+        act_frac_w = 1.0 - margin_r - act_start_x
 
         row_frac_h = (1.0 - margin_top - margin_bot) / num_agents
         inner_h = row_frac_h - 0.04
@@ -284,21 +287,20 @@ class EnhancedSearchAndRescueViewer:
             main_ax.set_yticks([])
             main_ax.set_aspect("equal")
 
-            # Targets
             for t_idx in range(num_targets):
                 color = _TARGET_FOUND if tfound[t_idx] else _TARGET_UNFOUND
-                main_ax.scatter(
-                    tpos[t_idx, 0],
-                    tpos[t_idx, 1],
-                    c=color,
-                    s=25,
+                dot = mpatches.Circle(
+                    (tpos[t_idx, 0], tpos[t_idx, 1]),
+                    radius=self.target_visual_radius,
+                    facecolor=color,
+                    edgecolor="none",
                     zorder=3,
-                    linewidths=0,
                 )
+                main_ax.add_patch(dot)
                 if newly_found[t_idx]:
                     pulse = mpatches.Circle(
                         (tpos[t_idx, 0], tpos[t_idx, 1]),
-                        radius=0.03,
+                        radius=self.target_visual_radius * 2.0,
                         fill=False,
                         edgecolor=_TARGET_UNFOUND,
                         linewidth=2.0,
@@ -477,7 +479,7 @@ def _draw_obs_radar(
         f"Agent {agent_idx}  OBS",
         fontsize=12,
         color=color,
-        pad=6,
+        pad=2,
         bbox=dict(boxstyle="round,pad=0.3", facecolor=(r_c, g_c, b_c, 0.12), edgecolor="none"),
     )
 
@@ -489,7 +491,7 @@ def _draw_obs_radar(
     ax.legend(
         handles=legend_patches,
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.28),
+        bbox_to_anchor=(0.5, -0.08),
         ncol=3,
         fontsize=9,
         framealpha=0.0,
