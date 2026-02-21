@@ -184,31 +184,29 @@ class EnhancedSearchAndRescueViewer:
         num_targets = int(np.array(states[0].targets.pos).shape[0])
 
         # ── figure layout ─────────────────────────────────────────────────────
-        # Main map must stay square (env is 1×1).  We allocate a fixed square
-        # region for it and let the bottom panels fill the remaining height.
-        map_size_in = 7.0  # square inches for the main map
-        panel_h_in = 3.5  # inches for the bottom agent panels
-        fig_h = map_size_in + panel_h_in + 0.8  # total + margins
-        panel_w_in = max(3.0 * num_agents, map_size_in)
-        fig_w = panel_w_in + 0.6
+        # Left column: square main map.
+        # Right column: per-agent panels stacked vertically, each row = [obs | action].
+        map_size_in = 7.0
+        panel_row_h = 3.2  # height per agent row
+        panel_col_w = 3.0  # width of obs panel
+        action_col_w = 3.0  # width of action panel
+        right_w = panel_col_w + action_col_w + 0.3  # total right-column width
+
+        fig_h = max(map_size_in + 0.6, num_agents * panel_row_h + 0.6)
+        fig_w = map_size_in + right_w + 0.7
 
         fig = plt.figure(figsize=(fig_w, fig_h), facecolor=_BG_COLOR)
 
-        # Use absolute positioning so the map stays square regardless of ncols.
-        # left/bottom/width/height are in figure-fraction units.
-        margin_l = 0.04
-        margin_r = 0.04
+        margin_l = 0.03
+        margin_r = 0.02
         margin_top = 0.03
-        margin_mid = 0.06  # gap between map and panels
         margin_bot = 0.04
+        gap_lr = 0.04  # gap between map and right panels
 
-        map_frac_h = map_size_in / fig_h
-        panel_frac_h = panel_h_in / fig_h
         map_frac_w = map_size_in / fig_w
-
-        # Centre the square map horizontally
-        map_left = (1.0 - map_frac_w) / 2
-        map_bottom = margin_bot + panel_frac_h + margin_mid
+        map_frac_h = map_size_in / fig_h
+        map_left = margin_l
+        map_bottom = (1.0 - map_frac_h) / 2  # vertically centred
 
         main_ax = fig.add_axes(
             [map_left, map_bottom, map_frac_w, map_frac_h],
@@ -222,22 +220,26 @@ class EnhancedSearchAndRescueViewer:
         for spine in main_ax.spines.values():
             spine.set_edgecolor("#AAAAAA")
 
-        # Per-agent sub-axes — evenly spaced in the bottom strip
+        # Right column: each agent gets one row split into [obs | action]
+        right_start_x = map_left + map_frac_w + gap_lr
+        obs_frac_w = (panel_col_w / fig_w) - 0.01
+        act_frac_w = (action_col_w / fig_w) - 0.01
+        act_start_x = right_start_x + obs_frac_w + 0.02
+
+        row_frac_h = (1.0 - margin_top - margin_bot) / num_agents
+        inner_h = row_frac_h - 0.04
+
         obs_axes: List[plt.Axes] = []
         act_axes: List[plt.Axes] = []
-        ncols = num_agents * 2
-        col_w = (1.0 - margin_l - margin_r) / ncols
         for i in range(num_agents):
-            obs_left = margin_l + (i * 2) * col_w + 0.01
-            act_left = margin_l + (i * 2 + 1) * col_w + 0.01
-            col_inner_w = col_w - 0.02
+            row_bottom = margin_bot + (num_agents - 1 - i) * row_frac_h + 0.02
 
             obs_ax = fig.add_axes(
-                [obs_left, margin_bot, col_inner_w, panel_frac_h - 0.02],
+                [right_start_x, row_bottom, obs_frac_w, inner_h],
                 projection="polar",
             )
             act_ax = fig.add_axes(
-                [act_left, margin_bot, col_inner_w, panel_frac_h - 0.02],
+                [act_start_x, row_bottom, act_frac_w, inner_h],
             )
             obs_ax.set_facecolor(_PANEL_BG)
             act_ax.set_facecolor(_PANEL_BG)
@@ -365,11 +367,11 @@ class EnhancedSearchAndRescueViewer:
                     np.sin(h),
                     color=color,
                     pivot="middle",
-                    width=0.006,
-                    headwidth=5,
-                    headlength=8,
-                    headaxislength=8,
-                    scale=18,
+                    width=0.003,
+                    headwidth=4,
+                    headlength=5,
+                    headaxislength=5,
+                    scale=35,
                     zorder=5,
                 )
 
