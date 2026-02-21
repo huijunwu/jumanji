@@ -28,7 +28,6 @@ import matplotlib.animation
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.gridspec import GridSpec
 
 from jumanji.environments.swarms.search_and_rescue.types import Observation, State
 
@@ -43,11 +42,17 @@ _AGENT_COLORS = [
 ]
 _TARGET_UNFOUND = "#E98449"
 _TARGET_FOUND = "#B3B6BC"
-_CH0_COLOR = "#A8DADC"  # other agents in obs
-_CH1_COLOR = "#B3B6BC"  # found targets in obs
-_CH2_COLOR = "#FF6B35"  # unfound targets in obs
+_CH0_COLOR = "#5B9BD5"  # other agents in obs
+_CH1_COLOR = "#888888"  # found targets in obs
+_CH2_COLOR = "#E98449"  # unfound targets in obs
 _ROT_COLOR = "#9B59B6"  # rotation action bar
 _ACC_COLOR = "#27AE60"  # acceleration action bar
+
+_BG_COLOR = "white"
+_PANEL_BG = "#F5F5F5"
+_TEXT_COLOR = "#222222"
+_GRID_COLOR = "#CCCCCC"
+_LABEL_COLOR = "#555555"
 
 
 def _agent_color(i: int) -> str:
@@ -179,42 +184,63 @@ class EnhancedSearchAndRescueViewer:
         num_targets = int(np.array(states[0].targets.pos).shape[0])
 
         # ── figure layout ─────────────────────────────────────────────────────
-        ncols = num_agents * 2
-        fig_w = max(10, 5 + 3 * num_agents)
-        fig_h = 10
-        fig = plt.figure(figsize=(fig_w, fig_h), facecolor="#1A1A2E")
+        # Main map must stay square (env is 1×1).  We allocate a fixed square
+        # region for it and let the bottom panels fill the remaining height.
+        map_size_in = 7.0  # square inches for the main map
+        panel_h_in = 3.5  # inches for the bottom agent panels
+        fig_h = map_size_in + panel_h_in + 0.8  # total + margins
+        panel_w_in = max(3.0 * num_agents, map_size_in)
+        fig_w = panel_w_in + 0.6
 
-        gs = GridSpec(
-            2,
-            ncols,
-            figure=fig,
-            height_ratios=[3, 2],
-            hspace=0.35,
-            wspace=0.3,
-            left=0.05,
-            right=0.97,
-            top=0.95,
-            bottom=0.04,
+        fig = plt.figure(figsize=(fig_w, fig_h), facecolor=_BG_COLOR)
+
+        # Use absolute positioning so the map stays square regardless of ncols.
+        # left/bottom/width/height are in figure-fraction units.
+        margin_l = 0.04
+        margin_r = 0.04
+        margin_top = 0.03
+        margin_mid = 0.06  # gap between map and panels
+        margin_bot = 0.04
+
+        map_frac_h = map_size_in / fig_h
+        panel_frac_h = panel_h_in / fig_h
+        map_frac_w = map_size_in / fig_w
+
+        # Centre the square map horizontally
+        map_left = (1.0 - map_frac_w) / 2
+        map_bottom = margin_bot + panel_frac_h + margin_mid
+
+        main_ax = fig.add_axes(
+            [map_left, map_bottom, map_frac_w, map_frac_h],
+            aspect="equal",
         )
-
-        # Main map
-        main_ax = fig.add_subplot(gs[0, :])
-        main_ax.set_facecolor("#0F0F23")
+        main_ax.set_facecolor(_BG_COLOR)
         main_ax.set_xlim(0, self.env_size[0])
         main_ax.set_ylim(0, self.env_size[1])
         main_ax.set_xticks([])
         main_ax.set_yticks([])
         for spine in main_ax.spines.values():
-            spine.set_edgecolor("#444466")
+            spine.set_edgecolor("#AAAAAA")
 
-        # Per-agent sub-axes
+        # Per-agent sub-axes — evenly spaced in the bottom strip
         obs_axes: List[plt.Axes] = []
         act_axes: List[plt.Axes] = []
+        ncols = num_agents * 2
+        col_w = (1.0 - margin_l - margin_r) / ncols
         for i in range(num_agents):
-            obs_ax = fig.add_subplot(gs[1, i * 2], projection="polar")
-            act_ax = fig.add_subplot(gs[1, i * 2 + 1])
-            obs_ax.set_facecolor("#0F0F23")
-            act_ax.set_facecolor("#0F0F23")
+            obs_left = margin_l + (i * 2) * col_w + 0.01
+            act_left = margin_l + (i * 2 + 1) * col_w + 0.01
+            col_inner_w = col_w - 0.02
+
+            obs_ax = fig.add_axes(
+                [obs_left, margin_bot, col_inner_w, panel_frac_h - 0.02],
+                projection="polar",
+            )
+            act_ax = fig.add_axes(
+                [act_left, margin_bot, col_inner_w, panel_frac_h - 0.02],
+            )
+            obs_ax.set_facecolor(_PANEL_BG)
+            act_ax.set_facecolor(_PANEL_BG)
             obs_axes.append(obs_ax)
             act_axes.append(act_ax)
 
@@ -249,11 +275,12 @@ class EnhancedSearchAndRescueViewer:
 
             # ── main map ──────────────────────────────────────────────────────
             main_ax.cla()
-            main_ax.set_facecolor("#0F0F23")
+            main_ax.set_facecolor(_BG_COLOR)
             main_ax.set_xlim(0, self.env_size[0])
             main_ax.set_ylim(0, self.env_size[1])
             main_ax.set_xticks([])
             main_ax.set_yticks([])
+            main_ax.set_aspect("equal")
 
             # Targets
             for t_idx in range(num_targets):
@@ -284,21 +311,26 @@ class EnhancedSearchAndRescueViewer:
                 p = pos[i]
                 h = float(heading[i])
 
-                # Trajectory trail
+                # Trajectory trail — skip segments that cross a wrapped boundary
                 start = max(0, frame_idx - self.trail_length)
-                trail_pos = np.array(all_pos[start : frame_idx + 1])  # (T, 2)
+                trail_pos = np.array(all_pos[start : frame_idx + 1])  # (T, num_agents, 2)
                 if len(trail_pos) > 1:
                     n = len(trail_pos)
                     r_c = int(color[1:3], 16) / 255
                     g_c = int(color[3:5], 16) / 255
                     b_c = int(color[5:7], 16) / 255
+                    half = self.env_size[0] / 2.0
                     for k in range(n - 1):
+                        p0 = trail_pos[k, i]
+                        p1 = trail_pos[k + 1, i]
+                        if abs(p1[0] - p0[0]) > half or abs(p1[1] - p0[1]) > half:
+                            continue  # wrapped boundary — do not draw
                         alpha = 0.05 + 0.55 * (k / (n - 1))
                         main_ax.plot(
-                            trail_pos[k : k + 2, i, 0],
-                            trail_pos[k : k + 2, i, 1],
+                            [p0[0], p1[0]],
+                            [p0[1], p1[1]],
                             color=(r_c, g_c, b_c, alpha),
-                            linewidth=1.2,
+                            linewidth=1.5,
                             zorder=2,
                         )
 
@@ -349,11 +381,13 @@ class EnhancedSearchAndRescueViewer:
                 0.98,
                 hud_text,
                 transform=main_ax.transAxes,
-                fontsize=9,
-                color="white",
+                fontsize=13,
+                color=_TEXT_COLOR,
                 va="top",
                 ha="left",
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="#000000", alpha=0.6),
+                bbox=dict(
+                    boxstyle="round,pad=0.4", facecolor="white", alpha=0.8, edgecolor="#CCCCCC"
+                ),
                 zorder=10,
             )
 
@@ -405,55 +439,46 @@ def _draw_obs_radar(
 ) -> None:
     """Draw a polar radar showing the 3-channel ray observation."""
     ax.cla()
-    ax.set_facecolor("#0F0F23")
+    ax.set_facecolor(_PANEL_BG)
 
     num_rays = views.shape[1]
-    # Ray angles: from -view_angle_rad to +view_angle_rad
-    # In polar axes: theta=0 is east; we want 0 = forward (north-ish).
-    # We'll keep theta=0 as the centre of the FOV and use raw angles.
     thetas = np.linspace(-view_angle_rad, view_angle_rad, num_rays)
 
     channel_colors = [_CH0_COLOR, _CH1_COLOR, _CH2_COLOR]
     channel_labels = ["agents", "found", "unfound"]
 
     for ch in range(3):
-        raw = views[ch]  # (128,) values in [-1, 1], -1 = empty
-        # Replace -1 (empty) with 0 for display
+        raw = views[ch]
         r = np.where(raw < 0, 0.0, raw)
-        # Close the polygon: repeat first point
         theta_plot = np.concatenate([thetas, [thetas[-1], thetas[0]]])
         r_plot = np.concatenate([r, [0.0, 0.0]])
         ax.fill(theta_plot, r_plot, color=channel_colors[ch], alpha=0.55, label=channel_labels[ch])
-        ax.plot(thetas, r, color=channel_colors[ch], linewidth=0.8, alpha=0.9)
+        ax.plot(thetas, r, color=channel_colors[ch], linewidth=1.2, alpha=0.9)
 
-    # Restrict visible angle range
     deg_min = np.degrees(-view_angle_rad)
     deg_max = np.degrees(view_angle_rad)
     ax.set_thetamin(deg_min)
     ax.set_thetamax(deg_max)
     ax.set_rlim(0, 1.05)
-    ax.set_rticks([0.25, 0.5, 0.75, 1.0])
-    ax.tick_params(labelsize=5, colors="#888888")
-    ax.set_theta_zero_location("N")  # 0 rad = top (forward)
-    ax.set_theta_direction(-1)  # clockwise = right
+    ax.set_rticks([0.5, 1.0])
+    ax.tick_params(labelsize=9, colors=_LABEL_COLOR)
+    ax.set_theta_zero_location("N")
+    ax.set_theta_direction(-1)
 
-    # Grid styling
-    ax.grid(color="#333355", linewidth=0.5, alpha=0.6)
-    ax.spines["polar"].set_color("#333355")
+    ax.grid(color=_GRID_COLOR, linewidth=0.6, alpha=0.8)
+    ax.spines["polar"].set_color(_GRID_COLOR)
 
-    # Title
     r_c = int(color[1:3], 16) / 255
     g_c = int(color[3:5], 16) / 255
     b_c = int(color[5:7], 16) / 255
     ax.set_title(
         f"Agent {agent_idx}  OBS",
-        fontsize=8,
+        fontsize=12,
         color=color,
-        pad=4,
-        bbox=dict(boxstyle="round,pad=0.2", facecolor=(r_c, g_c, b_c, 0.15)),
+        pad=6,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor=(r_c, g_c, b_c, 0.12), edgecolor="none"),
     )
 
-    # Legend (tiny)
     legend_patches = [
         mpatches.Patch(color=_CH0_COLOR, label="agents"),
         mpatches.Patch(color=_CH1_COLOR, label="found"),
@@ -462,11 +487,11 @@ def _draw_obs_radar(
     ax.legend(
         handles=legend_patches,
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.22),
+        bbox_to_anchor=(0.5, -0.28),
         ncol=3,
-        fontsize=5,
+        fontsize=9,
         framealpha=0.0,
-        labelcolor="#AAAAAA",
+        labelcolor=_LABEL_COLOR,
     )
 
 
@@ -481,7 +506,7 @@ def _draw_action_bars(
 ) -> None:
     """Draw action bars (rotation, acceleration) and result readout."""
     ax.cla()
-    ax.set_facecolor("#0F0F23")
+    ax.set_facecolor(_PANEL_BG)
     ax.set_xlim(-1.3, 1.3)
     ax.set_ylim(-0.5, 3.5)
     ax.set_xticks([])
@@ -489,101 +514,68 @@ def _draw_action_bars(
     for spine in ax.spines.values():
         spine.set_visible(False)
 
-    rot_val = float(action[0])  # [-1, 1]
-    acc_val = float(action[1])  # [-1, 1]
+    rot_val = float(action[0])
+    acc_val = float(action[1])
 
-    bar_height = 0.35
+    bar_height = 0.38
     bar_y_rot = 2.7
     bar_y_acc = 1.8
 
-    # ── background bars ───────────────────────────────────────────────────────
     for bar_y in [bar_y_rot, bar_y_acc]:
-        ax.barh(
-            bar_y,
-            2.0,
-            left=-1.0,
-            height=bar_height,
-            color="#2A2A4A",
-            zorder=1,
-        )
+        ax.barh(bar_y, 2.0, left=-1.0, height=bar_height, color="#DDDDDD", zorder=1)
 
-    # ── centre line ───────────────────────────────────────────────────────────
     for bar_y in [bar_y_rot, bar_y_acc]:
         ax.axvline(
             0,
             ymin=(bar_y - bar_height / 2) / 4,
             ymax=(bar_y + bar_height / 2) / 4,
-            color="#666688",
-            linewidth=0.8,
+            color="#999999",
+            linewidth=1.0,
             zorder=2,
         )
 
-    # ── rotation bar ──────────────────────────────────────────────────────────
-    ax.barh(
-        bar_y_rot,
-        rot_val,
-        left=0.0,
-        height=bar_height,
-        color=_ROT_COLOR,
-        alpha=0.85,
-        zorder=3,
-    )
-    ax.text(-1.25, bar_y_rot, "rot", va="center", ha="left", fontsize=7, color="#AAAACC")
+    ax.barh(bar_y_rot, rot_val, left=0.0, height=bar_height, color=_ROT_COLOR, alpha=0.85, zorder=3)
+    ax.text(-1.25, bar_y_rot, "rot", va="center", ha="left", fontsize=11, color=_LABEL_COLOR)
     rot_deg = rot_val * max_rotate * 180
     ax.text(
-        1.25, bar_y_rot, f"{rot_deg:+.1f}°", va="center", ha="right", fontsize=7, color=_ROT_COLOR
+        1.25, bar_y_rot, f"{rot_deg:+.1f}°", va="center", ha="right", fontsize=11, color=_ROT_COLOR
     )
 
-    # ── acceleration bar ──────────────────────────────────────────────────────
-    ax.barh(
-        bar_y_acc,
-        acc_val,
-        left=0.0,
-        height=bar_height,
-        color=_ACC_COLOR,
-        alpha=0.85,
-        zorder=3,
-    )
-    ax.text(-1.25, bar_y_acc, "acc", va="center", ha="left", fontsize=7, color="#AAAACC")
+    ax.barh(bar_y_acc, acc_val, left=0.0, height=bar_height, color=_ACC_COLOR, alpha=0.85, zorder=3)
+    ax.text(-1.25, bar_y_acc, "acc", va="center", ha="left", fontsize=11, color=_LABEL_COLOR)
     ax.text(
-        1.25, bar_y_acc, f"{acc_val:+.2f}", va="center", ha="right", fontsize=7, color=_ACC_COLOR
+        1.25, bar_y_acc, f"{acc_val:+.2f}", va="center", ha="right", fontsize=11, color=_ACC_COLOR
     )
 
-    # ── x-axis ticks ─────────────────────────────────────────────────────────
     for xv, lbl in [(-1, "-1"), (0, "0"), (1, "+1")]:
-        ax.text(xv, 1.35, lbl, va="top", ha="center", fontsize=6, color="#666688")
+        ax.text(xv, 1.35, lbl, va="top", ha="center", fontsize=9, color="#888888")
 
-    # ── result readout ────────────────────────────────────────────────────────
-    # Speed bar (normalised 0→1 between min and max speed)
     speed_min, speed_max = 0.005, 0.02
-    speed_norm = (speed - speed_min) / (speed_max - speed_min)
-    ax.barh(0.75, 1.0, left=0.0, height=0.28, color="#2A2A4A", zorder=1)
-    ax.barh(0.75, speed_norm, left=0.0, height=0.28, color=color, alpha=0.75, zorder=2)
-    ax.text(-1.25, 0.75, "spd", va="center", ha="left", fontsize=7, color="#AAAACC")
-    ax.text(1.25, 0.75, f"{speed:.4f}", va="center", ha="right", fontsize=7, color=color)
+    speed_norm = np.clip((speed - speed_min) / (speed_max - speed_min), 0.0, 1.0)
+    ax.barh(0.75, 1.0, left=0.0, height=0.30, color="#DDDDDD", zorder=1)
+    ax.barh(0.75, speed_norm, left=0.0, height=0.30, color=color, alpha=0.75, zorder=2)
+    ax.text(-1.25, 0.75, "spd", va="center", ha="left", fontsize=11, color=_LABEL_COLOR)
+    ax.text(1.25, 0.75, f"{speed:.4f}", va="center", ha="right", fontsize=11, color=color)
 
-    # Reward
-    rew_color = _TARGET_UNFOUND if float(reward) > 0 else "#666688"
-    rew_text = f"reward: {float(reward):.3f}"
+    rew_color = _TARGET_UNFOUND if float(reward) > 0 else "#888888"
     ax.text(
         0.0,
-        0.15,
-        rew_text,
+        0.10,
+        f"reward: {float(reward):.3f}",
         va="center",
         ha="center",
-        fontsize=8,
+        fontsize=12,
         color=rew_color,
         fontweight="bold" if float(reward) > 0 else "normal",
     )
 
-    # Title
     r_c = int(color[1:3], 16) / 255
     g_c = int(color[3:5], 16) / 255
     b_c = int(color[5:7], 16) / 255
     ax.set_title(
         f"Agent {agent_idx}  ACTION",
-        fontsize=8,
+        fontsize=12,
         color=color,
-        pad=4,
-        bbox=dict(boxstyle="round,pad=0.2", facecolor=(r_c, g_c, b_c, 0.15)),
+        pad=6,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor=(r_c, g_c, b_c, 0.12), edgecolor="none"),
     )
