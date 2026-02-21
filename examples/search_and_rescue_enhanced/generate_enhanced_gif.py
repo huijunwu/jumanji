@@ -1,11 +1,10 @@
-"""Generate an enhanced Search-and-Rescue visualisation GIF.
-
-Run from the repo root (or any directory where jumanji is importable):
-
-    python jumanji/examples/search_and_rescue_enhanced_viz/generate_enhanced_gif.py
-
-The output GIF is saved next to this script as ``search_and_rescue_enhanced.gif``.
-"""
+# Install (once, from repo root):
+#   pip install -e .
+#
+# Run (from repo root):
+#   python examples/search_and_rescue_enhanced/generate_enhanced_gif.py
+#
+# Output: examples/search_and_rescue_enhanced/search_and_rescue_enhanced.gif
 
 import os
 
