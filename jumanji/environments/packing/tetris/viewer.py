@@ -223,7 +223,6 @@ class TetrisViewer(MatplotlibViewer[State]):
         """
         fig_name = self._name + "_animation"
         fig = plt.figure(fig_name, figsize=self.figure_size)
-        plt.close(fig=fig)
 
         # Rotation panel layout: each mini-cell is half a main-grid cell.
         # 4 rotations × 4 cells + 3 gaps = 19 mini-cells ≈ num_cols width.
@@ -247,6 +246,7 @@ class TetrisViewer(MatplotlibViewer[State]):
         )
         ax_panel = fig.add_subplot(gs[0])
         ax_main = fig.add_subplot(gs[1])
+        plt.close(fig=fig)
 
         # Per-frame data: (grid, score, all_rotations, rot_idx, type_idx, x_pos, grid_color_val)
         frames: List[Tuple[chex.Array, float, chex.Array, int, int, int, int]] = []
