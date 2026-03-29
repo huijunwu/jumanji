@@ -1,0 +1,43 @@
+
+Traceback (most recent call last):
+  File "/home/pig/github/snake-jax/v4_jumanji_tetris/dqn_cnn/demo.py", line 49, in <module>
+    main()
+  File "/home/pig/github/snake-jax/v4_jumanji_tetris/dqn_cnn/demo.py", line 44, in main
+    env.animate(states, interval=50, save_path=gif_path)
+  File "/home/pig/github/jumanji/jumanji/environments/packing/tetris/env.py", line 308, in animate
+    return self._viewer.animate(states, interval, save_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pig/github/jumanji/jumanji/environments/packing/tetris/viewer.py", line 248, in animate
+    ax_panel = fig.add_subplot(gs[0])
+               ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/figure.py", line 770, in add_subplot
+    return self._add_axes_internal(ax, key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/figure.py", line 777, in _add_axes_internal
+    self.sca(ax)
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/figure.py", line 1705, in sca
+    self._axobservers.process("_axes_change_event", self)
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/cbook.py", line 366, in process
+    self.exception_handler(exc)
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/cbook.py", line 110, in _exception_printer
+    raise exc
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/cbook.py", line 361, in process
+    func(*args, **kwargs)
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/figure.py", line 3332, in <lambda>
+    self._axobservers.connect("_axes_change_event", lambda arg: func(arg))
+                                                                ^^^^^^^^^
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/backend_bases.py", line 2646, in notify_axes_change
+    self.toolbar.update()
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/backend_bases.py", line 3264, in update
+    self.set_history_buttons()
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/site-packages/matplotlib/backends/_backend_tk.py", line 946, in set_history_buttons
+    self._buttons['Back']['state'] = state_map[can_back]
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/tkinter/__init__.py", line 1733, in __setitem__
+    self.configure({key: value})
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/tkinter/__init__.py", line 1722, in configure
+    return self._configure('configure', cnf, kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pig/miniconda3/envs/snake/lib/python3.12/tkinter/__init__.py", line 1712, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: invalid command name ".!navigationtoolbar2tk.!button2"
